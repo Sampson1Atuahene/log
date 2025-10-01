@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Logistic Regression Practice (1D)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root{
+      --bg:#0f172a; --panel:#111827; --muted:#9ca3af; --text:#e5e7eb; --accent:#22c55e;
+      --line:#6b7280; --card:#0b1220; --radius:16px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial; background:var(--bg); color:var(--text);
+    }
+    .wrap{max-width:1100px; margin:32px auto; padding:0 16px;}
+    h1{font-size:1.6rem; margin:0 0 12px}
+    h2{font-size:1.05rem; color:var(--muted); margin:18px 0 8px}
+    .grid{display:grid; gap:16px}
+    @media (min-width:900px){
+      .grid{grid-template-columns: 1fr 1fr}
+      .grid-wide{grid-template-columns: 1.2fr .8fr}
+    }
+    .card{
+      background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:var(--radius);
+      padding:14px;
+    }
+    textarea{
+      width:100%; min-height:160px; border-radius:12px; border:1px solid rgba(255,255,255,.12);
+      padding:10px; background:#0b1220; color:var(--text); font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+    .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+    button, select, input[type="number"]{
+      background:#141b2c; color:var(--text); border:1px solid rgba(255,255,255,.1); border-radius:10px; padding:8px 12px;
+    }
+    button:hover{border-color:rgba(255,255,255,.25)}
+    .pill{display:inline-flex; align-items:center; gap:8px; padding:8px 10px; border-radius:999px; background:#101626; border:1px solid rgba(255,255,255,.08)}
+    .small{font-size:.92rem; color:var(--muted)}
+    .flex{display:flex; gap:12px; align-items:center; flex-wrap:wrap}
+    .grow{flex:1}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;}
+    canvas{background:#0b1220; border-radius:14px; border:1px solid rgba(255,255,255,.08)}
+    .legend{display:flex; gap:12px; align-items:center; flex-wrap:wrap; color:var(--muted); font-size:.95rem}
+    .legend .dot{width:10px; height:10px; border-radius:50%}
+    .hr{height:1px; background:rgba(255,255,255,.08); margin:10px 0}
+    .muted{color:var(--muted)}
+    .badge{padding:2px 8px; border-radius:8px; background:#122; border:1px solid rgba(255,255,255,.08)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Logistic Regression Practice (1D)</h1>
+    <p class="small">Paste the CSV dataset <span class="mono">(x,y)</span> and parameter updates <span class="mono">(b,a)</span> to visualize and animate the sigmoid fit.</p>
+
+    <div class="grid grid-wide">
+      <!-- Left column: Inputs -->
+      <div class="card">
+        <h2>1) Dataset <span class="mono">(x,y)</span> CSV</h2>
+        <div class="row" style="margin-bottom:8px">
+          <button id="btn-load-sample">Load Sample Data</button>
+          <button id="btn-copy-sample">Copy Sample CSV</button>
+          <span class="small">Format: two columns <span class="mono">x,y</span> (header optional).</span>
+        </div>
+        <textarea id="ta-data" placeholder="x,y
+-2,0
+-1.2,0
+-0.7,0
+-0.1,0
+0.2,1
+0.6,1
+1.1,1
+1.6,1"></textarea>
+
+        <div class="hr"></div>
+
+        <h2>2) Parameter updates <span class="mono">(b,a)</span> CSV</h2>
+        <p class="small">Each row is an update: <span class="mono">b,a</span> (intercept first, slope second). Convention:</p>
+        <ul class="small" style="margin-top:-6px">
+          <li><span class="mono">a*x + b</span> (a = slope, b = intercept)</li>
+          <li><span class="mono">a + b*x</span> (a = intercept, b = slope)</li>
+        </ul>
+        <textarea id="ta-updates" placeholder="b,a
+0, 0.5
+-0.2, 0.8
+-0.4, 1.1
+-0.7, 1.4
+-1.0, 1.7
+-1.3, 2.0"></textarea>
+      </div>
+
+      <!-- Right column: Controls + Plot -->
+      <div class="card">
+        <h2>3) Plot</h2>
+        <div class="flex" style="margin-bottom:10px">
+          <div class="flex">
+            <button id="btn-start">Start Animation</button>
+            <button id="btn-pause">Pause</button>
+            <button id="btn-reset">Reset</button>
+          </div>
+          <div class="pill">
+            <label for="speed" class="small">Speed:</label>
+            <input id="speed" type="number" min="100" step="50" value="700" style="width:90px" />
+            <span class="small">ms</span>
+          </div>
+          <div class="pill">
+            <label for="view" class="small">View:</label>
+            <select id="view">
+              <option value="full">Sigmoid + classes (0/1)</option>
+              <option value="threshold">Threshold-only (points on x-axis)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex small">
+          <div class="badge">Step: <span id="step">0</span></div>
+          <div class="badge">b (intercept): <span id="b">—</span></div>
+          <div class="badge">a (slope): <span id="a">—</span></div>
+        </div>
+
+        <div style="margin-top:10px">
+          <canvas id="chart" height="340"></canvas>
+        </div>
+
+        <div class="legend" style="margin-top:8px">
+          <span class="dot" style="background:#3b82f6"></span><span>class 0 at y=0</span>
+          <span class="dot" style="background:#ef4444"></span><span>class 1 at y=1</span>
+          <span style="border-bottom:2px dashed var(--line); width:22px"></span><span> y = 0.5</span>
+        </div>
+
+        <p class="small muted" style="margin-top:8px">
+          We animate <span class="mono">σ(z) = 1 / (1 + exp(-z))</span> with <span class="mono">z = a·x + b</span> using your (b,a) updates (intercept first, slope second).
+          Front-end only. No frameworks (aside from Chart.js) are used.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Helpers ---
+    const parseCSV = (txt) => {
+      if (!txt.trim()) return [];
+      const lines = txt.trim().split(/\r?\n/);
+      // Detect header if any (non-numeric at start)
+      const first = lines[0].split(/,|\s+/).map(s => s.trim());
+      let start = 0;
+      const numericish = (s) => /^[-+]?(\d+(\.\d+)?|\.\d+)$/.test(s);
+      if (first.length >= 2 && (!numericish(first[0]) || !numericish(first[1]))) start = 1;
+
+      const rows = [];
+      for (let i = start; i < lines.length; i++) {
+        const parts = lines[i].split(/,|\s+/).map(s => s.trim()).filter(Boolean);
+        if (parts.length >= 2) {
+          const a = parseFloat(parts[0]);
+          const b = parseFloat(parts[1]);
+          if (Number.isFinite(a) && Number.isFinite(b)) rows.push([a, b]);
+        }
+      }
+      return rows;
+    };
+
+    const sigmoid = (z) => 1 / (1 + Math.exp(-z));
+
+    // --- Elements ---
+    const taData = document.getElementById('ta-data');
+    const taUpdates = document.getElementById('ta-updates');
+    const btnSample = document.getElementById('btn-load-sample');
+    const btnCopySample = document.getElementById('btn-copy-sample');
+    const btnStart = document.getElementById('btn-start');
+    const btnPause = document.getElementById('btn-pause');
+    const btnReset = document.getElementById('btn-reset');
+    const stepEl = document.getElementById('step');
+    const bEl = document.getElementById('b');
+    const aEl = document.getElementById('a');
+    const speedEl = document.getElementById('speed');
+    const viewSel = document.getElementById('view');
+    const ctx = document.getElementById('chart').getContext('2d');
+
+    // --- Sample data ---
+    const SAMPLE_DATA = `x,y
+-3,0
+-2.2,0
+-1.7,0
+-1.1,0
+-0.5,0
+0.1,1
+0.6,1
+1.0,1
+1.4,1
+2.2,1`;
+
+    // Use a gentle path for (b,a)
+    const SAMPLE_UPDATES = `b,a
+0.0,0.6
+-0.2,0.8
+-0.4,1.0
+-0.6,1.2
+-0.8,1.4
+-1.0,1.6
+-1.2,1.8
+-1.3,2.0
+-1.35,2.2
+-1.4,2.4`;
+
+    btnSample.addEventListener('click', () => {
+      taData.value = SAMPLE_DATA;
+      taUpdates.value = SAMPLE_UPDATES;
+      resetAnim(true);
+    });
+
+    btnCopySample.addEventListener('click', async () => {
+      try{
+        await navigator.clipboard.writeText(SAMPLE_DATA);
+        btnCopySample.textContent = 'Copied!';
+        setTimeout(()=>btnCopySample.textContent='Copy Sample CSV', 900);
+      }catch(e){ alert('Copy failed.'); }
+    });
+
+    // --- Prepare Chart.js ---
+    let chart;
+    let animTimer = null;
+    let animIdx = 0;
+    let X = [];     // data x
+    let Y = [];     // data y (0/1)
+    let UP = [];    // updates [ [b,a], ... ]
+
+    const buildChart = () => {
+      if (chart) chart.destroy();
+
+      // Build datasets
+      const pts0 = X.map((x,i)=>({x, y: viewSel.value==='threshold' ? 0 : 0}))
+                    .filter((_,i)=>Y[i]===0);
+      const pts1 = X.map((x,i)=>({x, y: viewSel.value==='threshold' ? 0 : 1}))
+                    .filter((_,i)=>Y[i]===1);
+
+      // x-range for curve
+      const xmin = Math.min(...X) - 0.5, xmax = Math.max(...X) + 0.5;
+      const curveX = [];
+      for (let t=xmin; t<=xmax; t+= (xmax-xmin)/200) curveX.push(t);
+
+      const current = UP[Math.max(0, Math.min(animIdx-1, UP.length-1))] || [0,0];
+      const [b,a] = current;
+
+      const curve = curveX.map(t => ({x:t, y: sigmoid(a*t + b)}));
+
+      chart = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+          datasets: [
+            {
+              label: 'class 0',
+              data: pts0,
+              pointBackgroundColor: '#3b82f6',
+              pointBorderColor: '#3b82f6',
+              pointRadius: 4
+            },
+            {
+              label: 'class 1',
+              data: pts1,
+              pointBackgroundColor: '#ef4444',
+              pointBorderColor: '#ef4444',
+              pointRadius: 4
+            },
+            {
+              label: 'sigmoid',
+              data: curve,
+              type: 'line',
+              borderColor: '#22c55e',
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.25
+            },
+            {
+              label: 'y=0.5',
+              data: [{x:xmin,y:0.5},{x:xmax,y:0.5}],
+              type: 'line',
+              borderColor: '#6b7280',
+              borderWidth: 1,
+              borderDash: [6,6],
+              pointRadius: 0
+            }
+          ]
+        },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { enabled: true }
+          },
+          scales: {
+            x: {
+              title: { display:true, text:'x', color:'#cbd5e1' },
+              grid: { color: 'rgba(255,255,255,.06)' },
+              ticks: { color:'#cbd5e1' }
+            },
+            y: {
+              min: (viewSel.value==='threshold') ? -0.1 : -0.05,
+              max: 1.05,
+              title: { display:true, text:(viewSel.value==='threshold') ? 'class axis' : 'y', color:'#cbd5e1' },
+              grid: { color: 'rgba(255,255,255,.06)' },
+              ticks: { color:'#cbd5e1', stepSize: 0.1 }
+            }
+          }
+        }
+      });
+
+      // Update badges
+      stepEl.textContent = String(Math.max(0, animIdx-1));
+      bEl.textContent = Number.isFinite(b) ? b.toFixed(3) : '—';
+      aEl.textContent = Number.isFinite(a) ? a.toFixed(3) : '—';
+    };
+
+    const refreshSigmoidOnly = () => {
+      if (!chart) return;
+      const xmin = chart.scales.x.min ?? Math.min(...X)-0.5;
+      const xmax = chart.scales.x.max ?? Math.max(...X)+0.5;
+      const curveX = [];
+      for (let t=xmin; t<=xmax; t+= (xmax-xmin)/200) curveX.push(t);
+
+      const current = UP[Math.max(0, Math.min(animIdx-1, UP.length-1))] || [0,0];
+      const [b,a] = current;
+      const curve = curveX.map(t => ({x:t, y: sigmoid(a*t + b)}));
+      // dataset 2 is sigmoid, 3 is y=0.5
+      chart.data.datasets[2].data = curve;
+      chart.update('none');
+
+      // Update badges
+      stepEl.textContent = String(Math.max(0, animIdx-1));
+      bEl.textContent = Number.isFinite(b) ? b.toFixed(3) : '—';
+      aEl.textContent = Number.isFinite(a) ? a.toFixed(3) : '—';
+    };
+
+    const loadFromTextareas = () => {
+      const dataRows = parseCSV(taData.value);
+      X = dataRows.map(r => r[0]);
+      Y = dataRows.map(r => r[1] > 0 ? 1 : 0);
+
+      UP = parseCSV(taUpdates.value); // array of [b,a]
+      animIdx = 0;
+      buildChart();
+    };
+
+    const startAnim = () => {
+      if (!UP.length) return;
+      if (animTimer) return; // already running
+      // Step once immediately so users see the curve move at start
+      stepAnim();
+      animTimer = setInterval(stepAnim, Math.max(50, +speedEl.value || 700));
+    };
+
+    const pauseAnim = () => {
+      if (animTimer) {
+        clearInterval(animTimer);
+        animTimer = null;
+      }
+    };
+
+    const resetAnim = (reparse=false) => {
+      pauseAnim();
+      if (reparse) loadFromTextareas();
+      animIdx = 0;
+      buildChart();
+    };
+
+    const stepAnim = () => {
+      if (animIdx >= UP.length) {
+        pauseAnim();
+        return;
+      }
+      animIdx++;
+      refreshSigmoidOnly();
+    };
+
+    // --- Events ---
+    btnStart.addEventListener('click', () => {
+      if (!X.length || !UP.length) loadFromTextareas();
+      startAnim();
+    });
+    btnPause.addEventListener('click', pauseAnim);
+    btnReset.addEventListener('click', () => resetAnim(true));
+    speedEl.addEventListener('change', () => {
+      if (animTimer) { pauseAnim(); startAnim(); } // apply new speed
+    });
+    viewSel.addEventListener('change', () => {
+      // rebuild so class points relocate (full vs threshold)
+      buildChart();
+    });
+
+    // Initial render
+    loadFromTextareas();
+  </script>
+</body>
+</html>
